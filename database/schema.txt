@@ -1,0 +1,727 @@
+CREATE DATABASE IF NOT EXISTS payroll;
+USE payroll;
+
+-- 1. Roles
+CREATE TABLE roles (
+    role_id INT AUTO_INCREMENT PRIMARY KEY,
+    role_name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT
+);
+CREATE TABLE payroll_settings (
+    setting_id INT AUTO_INCREMENT PRIMARY KEY,
+    default_currency VARCHAR(10),
+    payroll_cycle ENUM('Monthly','Weekly','Biweekly'),
+    default_overtime_rate DECIMAL(5,2),
+    tax_percentage DECIMAL(5,2),
+    pension_percentage DECIMAL(5,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+-- 2. Users
+CREATE TABLE users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    role_id INT NOT NULL,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_users_role
+        FOREIGN KEY (role_id) REFERENCES roles(role_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+-- 3. Departments
+CREATE TABLE departments (
+    department_id INT AUTO_INCREMENT PRIMARY KEY,
+    department_name VARCHAR(150) NOT NULL UNIQUE,
+    description TEXT
+);
+
+-- 4. Positions
+CREATE TABLE positions (
+    position_id INT AUTO_INCREMENT PRIMARY KEY,
+    position_name VARCHAR(150) NOT NULL UNIQUE,
+    description TEXT
+);
+
+-- 5. Employees
+CREATE TABLE employees (
+    employee_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    department_id INT NOT NULL,
+    position_id INT NOT NULL,
+    employee_code VARCHAR(50) NOT NULL UNIQUE,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    gender ENUM('Male', 'Female', 'Other') NOT NULL,
+    phone VARCHAR(30),
+    email VARCHAR(150) UNIQUE,
+    address TEXT,
+    hire_date DATE NOT NULL,
+    employment_type ENUM('Full-time', 'Part-time', 'Contract') NOT NULL,
+    bank_name VARCHAR(100),
+    account_number VARCHAR(100),
+    basic_salary DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    status ENUM('Active', 'Resigned', 'Terminated', 'On Leave') NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_employees_user
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL,
+    CONSTRAINT fk_employees_department
+        FOREIGN KEY (department_id) REFERENCES departments(department_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_employees_position
+        FOREIGN KEY (position_id) REFERENCES positions(position_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+-- 6. Salary Structures
+CREATE TABLE salary_structures (
+    salary_structure_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id INT NOT NULL,
+    basic_salary DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    house_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    transport_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    medical_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    other_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    tax_percentage DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    pension_percentage DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    effective_from DATE NOT NULL,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    CONSTRAINT fk_salary_structures_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
+-- 7. Attendance
+CREATE TABLE attendance (
+    attendance_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id INT NOT NULL,
+    attendance_date DATE NOT NULL,
+    check_in_time TIME NULL,
+    check_out_time TIME NULL,
+    status ENUM('Present', 'Absent', 'Late', 'Half-day', 'Leave') NOT NULL,
+    worked_hours DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    remarks TEXT,
+    CONSTRAINT uq_attendance_employee_date UNIQUE (employee_id, attendance_date),
+    CONSTRAINT fk_attendance_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
+-- 8. Overtime Records
+CREATE TABLE overtime_records (
+    overtime_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id INT NOT NULL,
+    overtime_date DATE NOT NULL,
+    hours_worked DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    rate_per_hour DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    approved_by INT NULL,
+    status ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
+    CONSTRAINT fk_overtime_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_overtime_approved_by
+        FOREIGN KEY (approved_by) REFERENCES users(user_id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL
+);
+
+-- 9. Allowance Types
+CREATE TABLE allowance_types (
+    allowance_type_id INT AUTO_INCREMENT PRIMARY KEY,
+    allowance_name VARCHAR(150) NOT NULL UNIQUE,
+    description TEXT,
+    is_taxable BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- 10. Employee Allowances
+CREATE TABLE employee_allowances (
+    employee_allowance_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id INT NOT NULL,
+    allowance_type_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    is_recurring BOOLEAN NOT NULL DEFAULT TRUE,
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    CONSTRAINT fk_employee_allowances_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_employee_allowances_type
+        FOREIGN KEY (allowance_type_id) REFERENCES allowance_types(allowance_type_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+-- 11. Deduction Types
+CREATE TABLE deduction_types (
+    deduction_type_id INT AUTO_INCREMENT PRIMARY KEY,
+    deduction_name VARCHAR(150) NOT NULL UNIQUE,
+    description TEXT,
+    is_mandatory BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- 12. Employee Deductions
+CREATE TABLE employee_deductions (
+    employee_deduction_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id INT NOT NULL,
+    deduction_type_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    is_recurring BOOLEAN NOT NULL DEFAULT TRUE,
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    CONSTRAINT fk_employee_deductions_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_employee_deductions_type
+        FOREIGN KEY (deduction_type_id) REFERENCES deduction_types(deduction_type_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+-- 13. Payroll Periods
+CREATE TABLE payroll_periods (
+    period_id INT AUTO_INCREMENT PRIMARY KEY,
+    period_name VARCHAR(100) NOT NULL UNIQUE,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status ENUM('Open', 'Processing', 'Closed') NOT NULL DEFAULT 'Open',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. Payrolls
+CREATE TABLE payrolls (
+    payroll_id INT AUTO_INCREMENT PRIMARY KEY,
+    period_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    basic_salary DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    total_allowances DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    total_overtime DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    total_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    gross_salary DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    net_salary DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    processed_by INT NULL,
+    processed_date DATETIME NULL,
+    status ENUM('Draft', 'Approved', 'Paid') NOT NULL DEFAULT 'Draft',
+    CONSTRAINT uq_payroll_employee_period UNIQUE (period_id, employee_id),
+    CONSTRAINT fk_payrolls_period
+        FOREIGN KEY (period_id) REFERENCES payroll_periods(period_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_payrolls_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_payrolls_processed_by
+        FOREIGN KEY (processed_by) REFERENCES users(user_id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL
+);
+
+-- 15. Payroll Details
+CREATE TABLE payroll_details (
+    payroll_detail_id INT AUTO_INCREMENT PRIMARY KEY,
+    payroll_id INT NOT NULL,
+    item_type ENUM('Basic', 'Allowance', 'Deduction', 'Overtime') NOT NULL,
+    item_name VARCHAR(150) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    remarks TEXT,
+    CONSTRAINT fk_payroll_details_payroll
+        FOREIGN KEY (payroll_id) REFERENCES payrolls(payroll_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
+-- 16. Payslips
+CREATE TABLE payslips (
+    payslip_id INT AUTO_INCREMENT PRIMARY KEY,
+    payroll_id INT NOT NULL,
+    payslip_number VARCHAR(100) NOT NULL UNIQUE,
+    generated_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    file_path VARCHAR(255) NULL,
+    issued_by INT NULL,
+    CONSTRAINT fk_payslips_payroll
+        FOREIGN KEY (payroll_id) REFERENCES payrolls(payroll_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_payslips_issued_by
+        FOREIGN KEY (issued_by) REFERENCES users(user_id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL
+);
+
+-- 17. Payments
+CREATE TABLE payments (
+    payment_id INT AUTO_INCREMENT PRIMARY KEY,
+    payroll_id INT NOT NULL,
+    payment_date DATETIME NOT NULL,
+    payment_method ENUM('Bank', 'Cash', 'Mobile Money') NOT NULL,
+    reference_number VARCHAR(100),
+    amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    payment_status ENUM('Pending', 'Completed', 'Failed') NOT NULL DEFAULT 'Pending',
+    received_by VARCHAR(150) NULL,
+    CONSTRAINT fk_payments_payroll
+        FOREIGN KEY (payroll_id) REFERENCES payrolls(payroll_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_create_payroll_period(
+    IN p_period_name VARCHAR(100),
+    IN p_start_date DATE,
+    IN p_end_date DATE
+)
+BEGIN
+    INSERT INTO payroll_periods(period_name, start_date, end_date, status)
+    VALUES (p_period_name, p_start_date, p_end_date, 'Open');
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_add_employee(
+    IN p_user_id INT,
+    IN p_department_id INT,
+    IN p_position_id INT,
+    IN p_employee_code VARCHAR(50),
+    IN p_first_name VARCHAR(100),
+    IN p_last_name VARCHAR(100),
+    IN p_gender ENUM('Male', 'Female', 'Other'),
+    IN p_phone VARCHAR(30),
+    IN p_email VARCHAR(150),
+    IN p_address TEXT,
+    IN p_hire_date DATE,
+    IN p_employment_type ENUM('Full-time', 'Part-time', 'Contract'),
+    IN p_bank_name VARCHAR(100),
+    IN p_account_number VARCHAR(100),
+    IN p_basic_salary DECIMAL(12,2)
+)
+BEGIN
+    INSERT INTO employees(
+        user_id, department_id, position_id, employee_code,
+        first_name, last_name, gender, phone, email, address,
+        hire_date, employment_type, bank_name, account_number,
+        basic_salary, status
+    )
+    VALUES(
+        p_user_id, p_department_id, p_position_id, p_employee_code,
+        p_first_name, p_last_name, p_gender, p_phone, p_email, p_address,
+        p_hire_date, p_employment_type, p_bank_name, p_account_number,
+        p_basic_salary, 'Active'
+    );
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_save_attendance(
+    IN p_employee_id INT,
+    IN p_attendance_date DATE,
+    IN p_check_in_time TIME,
+    IN p_check_out_time TIME,
+    IN p_status ENUM('Present', 'Absent', 'Late', 'Half-day', 'Leave'),
+    IN p_remarks TEXT
+)
+BEGIN
+    DECLARE v_worked_hours DECIMAL(5,2);
+
+    IF p_check_in_time IS NOT NULL AND p_check_out_time IS NOT NULL THEN
+        SET v_worked_hours = TIME_TO_SEC(TIMEDIFF(p_check_out_time, p_check_in_time)) / 3600;
+    ELSE
+        SET v_worked_hours = 0.00;
+    END IF;
+
+    INSERT INTO attendance(
+        employee_id, attendance_date, check_in_time, check_out_time,
+        status, worked_hours, remarks
+    )
+    VALUES(
+        p_employee_id, p_attendance_date, p_check_in_time, p_check_out_time,
+        p_status, v_worked_hours, p_remarks
+    )
+    ON DUPLICATE KEY UPDATE
+        check_in_time = VALUES(check_in_time),
+        check_out_time = VALUES(check_out_time),
+        status = VALUES(status),
+        worked_hours = VALUES(worked_hours),
+        remarks = VALUES(remarks);
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_add_overtime(
+    IN p_employee_id INT,
+    IN p_overtime_date DATE,
+    IN p_hours_worked DECIMAL(5,2),
+    IN p_rate_per_hour DECIMAL(10,2),
+    IN p_approved_by INT
+)
+BEGIN
+    INSERT INTO overtime_records(
+        employee_id, overtime_date, hours_worked, rate_per_hour,
+        total_amount, approved_by, status
+    )
+    VALUES(
+        p_employee_id, p_overtime_date, p_hours_worked, p_rate_per_hour,
+        (p_hours_worked * p_rate_per_hour), p_approved_by, 'Approved'
+    );
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_assign_employee_allowance(
+    IN p_employee_id INT,
+    IN p_allowance_type_id INT,
+    IN p_amount DECIMAL(12,2),
+    IN p_is_recurring BOOLEAN,
+    IN p_effective_from DATE,
+    IN p_effective_to DATE
+)
+BEGIN
+    INSERT INTO employee_allowances(
+        employee_id, allowance_type_id, amount, is_recurring,
+        effective_from, effective_to, status
+    )
+    VALUES(
+        p_employee_id, p_allowance_type_id, p_amount, p_is_recurring,
+        p_effective_from, p_effective_to, 'Active'
+    );
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_assign_employee_deduction(
+    IN p_employee_id INT,
+    IN p_deduction_type_id INT,
+    IN p_amount DECIMAL(12,2),
+    IN p_is_recurring BOOLEAN,
+    IN p_effective_from DATE,
+    IN p_effective_to DATE
+)
+BEGIN
+    INSERT INTO employee_deductions(
+        employee_id, deduction_type_id, amount, is_recurring,
+        effective_from, effective_to, status
+    )
+    VALUES(
+        p_employee_id, p_deduction_type_id, p_amount, p_is_recurring,
+        p_effective_from, p_effective_to, 'Active'
+    );
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_process_payroll_for_employee(
+    IN p_period_id INT,
+    IN p_employee_id INT,
+    IN p_processed_by INT
+)
+BEGIN
+    DECLARE v_start_date DATE;
+    DECLARE v_end_date DATE;
+    DECLARE v_basic_salary DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_total_allowances DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_total_overtime DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_total_deductions DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_gross_salary DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_net_salary DECIMAL(12,2) DEFAULT 0.00;
+    DECLARE v_payroll_id INT;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    SELECT start_date, end_date
+    INTO v_start_date, v_end_date
+    FROM payroll_periods
+    WHERE period_id = p_period_id;
+
+    SELECT basic_salary
+    INTO v_basic_salary
+    FROM employees
+    WHERE employee_id = p_employee_id
+      AND status = 'Active';
+
+    SELECT COALESCE(SUM(amount), 0)
+    INTO v_total_allowances
+    FROM employee_allowances
+    WHERE employee_id = p_employee_id
+      AND status = 'Active'
+      AND effective_from <= v_end_date
+      AND (effective_to IS NULL OR effective_to >= v_start_date);
+
+    SELECT COALESCE(SUM(total_amount), 0)
+    INTO v_total_overtime
+    FROM overtime_records
+    WHERE employee_id = p_employee_id
+      AND status = 'Approved'
+      AND overtime_date BETWEEN v_start_date AND v_end_date;
+
+    SELECT COALESCE(SUM(amount), 0)
+    INTO v_total_deductions
+    FROM employee_deductions
+    WHERE employee_id = p_employee_id
+      AND status = 'Active'
+      AND effective_from <= v_end_date
+      AND (effective_to IS NULL OR effective_to >= v_start_date);
+
+    SET v_gross_salary = v_basic_salary + v_total_allowances + v_total_overtime;
+    SET v_net_salary = v_gross_salary - v_total_deductions;
+
+    INSERT INTO payrolls(
+        period_id, employee_id, basic_salary, total_allowances,
+        total_overtime, total_deductions, gross_salary, net_salary,
+        processed_by, processed_date, status
+    )
+    VALUES(
+        p_period_id, p_employee_id, v_basic_salary, v_total_allowances,
+        v_total_overtime, v_total_deductions, v_gross_salary, v_net_salary,
+        p_processed_by, NOW(), 'Approved'
+    )
+    ON DUPLICATE KEY UPDATE
+        basic_salary = VALUES(basic_salary),
+        total_allowances = VALUES(total_allowances),
+        total_overtime = VALUES(total_overtime),
+        total_deductions = VALUES(total_deductions),
+        gross_salary = VALUES(gross_salary),
+        net_salary = VALUES(net_salary),
+        processed_by = VALUES(processed_by),
+        processed_date = VALUES(processed_date),
+        status = VALUES(status);
+
+    SELECT payroll_id
+    INTO v_payroll_id
+    FROM payrolls
+    WHERE period_id = p_period_id
+      AND employee_id = p_employee_id;
+
+    DELETE FROM payroll_details
+    WHERE payroll_id = v_payroll_id;
+
+    INSERT INTO payroll_details(payroll_id, item_type, item_name, amount, remarks)
+    VALUES(v_payroll_id, 'Basic', 'Basic Salary', v_basic_salary, 'Monthly basic salary');
+
+    INSERT INTO payroll_details(payroll_id, item_type, item_name, amount, remarks)
+    VALUES(v_payroll_id, 'Allowance', 'Total Allowances', v_total_allowances, 'Employee allowances');
+
+    INSERT INTO payroll_details(payroll_id, item_type, item_name, amount, remarks)
+    VALUES(v_payroll_id, 'Overtime', 'Total Overtime', v_total_overtime, 'Approved overtime');
+
+    INSERT INTO payroll_details(payroll_id, item_type, item_name, amount, remarks)
+    VALUES(v_payroll_id, 'Deduction', 'Total Deductions', v_total_deductions, 'Employee deductions');
+
+    COMMIT;
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_process_payroll_for_all(
+    IN p_period_id INT,
+    IN p_processed_by INT
+)
+BEGIN
+    DECLARE v_done INT DEFAULT 0;
+    DECLARE v_employee_id INT;
+
+    DECLARE emp_cursor CURSOR FOR
+        SELECT employee_id
+        FROM employees
+        WHERE status = 'Active';
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_done = 1;
+
+    OPEN emp_cursor;
+
+    payroll_loop: LOOP
+        FETCH emp_cursor INTO v_employee_id;
+
+        IF v_done = 1 THEN
+            LEAVE payroll_loop;
+        END IF;
+
+        CALL sp_process_payroll_for_employee(p_period_id, v_employee_id, p_processed_by);
+    END LOOP;
+
+    CLOSE emp_cursor;
+
+    UPDATE payroll_periods
+    SET status = 'Closed'
+    WHERE period_id = p_period_id;
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_generate_payslip(
+    IN p_payroll_id INT,
+    IN p_issued_by INT
+)
+BEGIN
+    DECLARE v_payslip_number VARCHAR(100);
+
+    SET v_payslip_number = CONCAT('PS-', DATE_FORMAT(NOW(), '%Y%m%d'), '-', p_payroll_id);
+
+    INSERT INTO payslips(
+        payroll_id, payslip_number, generated_date, issued_by
+    )
+    VALUES(
+        p_payroll_id, v_payslip_number, NOW(), p_issued_by
+    );
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_record_payment(
+    IN p_payroll_id INT,
+    IN p_payment_date DATETIME,
+    IN p_payment_method ENUM('Bank', 'Cash', 'Mobile Money'),
+    IN p_reference_number VARCHAR(100),
+    IN p_amount_paid DECIMAL(12,2),
+    IN p_payment_status ENUM('Pending', 'Completed', 'Failed'),
+    IN p_received_by VARCHAR(150)
+)
+BEGIN
+    INSERT INTO payments(
+        payroll_id, payment_date, payment_method, reference_number,
+        amount_paid, payment_status, received_by
+    )
+    VALUES(
+        p_payroll_id, p_payment_date, p_payment_method, p_reference_number,
+        p_amount_paid, p_payment_status, p_received_by
+    );
+
+    IF p_payment_status = 'Completed' THEN
+        UPDATE payrolls
+        SET status = 'Paid'
+        WHERE payroll_id = p_payroll_id;
+    END IF;
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_change_employee_status(
+    IN p_employee_id INT,
+    IN p_status ENUM('Active', 'Resigned', 'Terminated', 'On Leave')
+)
+BEGIN
+    UPDATE employees
+    SET status = p_status
+    WHERE employee_id = p_employee_id;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_add_department(
+    IN p_department_name VARCHAR(150),
+    IN p_description TEXT
+)
+BEGIN
+    INSERT INTO departments(department_name, description)
+    VALUES(p_department_name, p_description);
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_add_position(
+    IN p_position_name VARCHAR(150),
+    IN p_description TEXT
+)
+BEGIN
+    INSERT INTO positions(position_name, description)
+    VALUES(p_position_name, p_description);
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_add_allowance_type(
+    IN p_allowance_name VARCHAR(150),
+    IN p_description TEXT,
+    IN p_is_taxable BOOLEAN
+)
+BEGIN
+    INSERT INTO allowance_types(allowance_name, description, is_taxable)
+    VALUES(p_allowance_name, p_description, p_is_taxable);
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_add_deduction_type(
+    IN p_deduction_name VARCHAR(150),
+    IN p_description TEXT,
+    IN p_is_mandatory BOOLEAN
+)
+BEGIN
+    INSERT INTO deduction_types(deduction_name, description, is_mandatory)
+    VALUES(p_deduction_name, p_description, p_is_mandatory);
+END $$
+
+DELIMITER ;
+
+

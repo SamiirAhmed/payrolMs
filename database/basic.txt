@@ -1,0 +1,159 @@
+roles(role_id PK, role_name, description)
+
+users(user_id PK, role_id FK, username, email, password_hash, status, created_at, updated_at)
+
+departments(department_id PK, department_name, description)
+
+positions(position_id PK, position_name, description)
+
+employees(
+  employee_id PK,
+  user_id FK,
+  department_id FK,
+  position_id FK,
+  employee_code,
+  first_name,
+  last_name,
+  gender,
+  phone,
+  email,
+  address,
+  hire_date,
+  employment_type,
+  bank_name,
+  account_number,
+  basic_salary,
+  status,
+  created_at,
+  updated_at
+)
+
+salary_structures(
+  salary_structure_id PK,
+  employee_id FK,
+  basic_salary,
+  house_allowance,
+  transport_allowance,
+  medical_allowance,
+  other_allowance,
+  tax_percentage,
+  pension_percentage,
+  effective_from,
+  status
+)
+
+
+attendance(
+  attendance_id PK,
+  employee_id FK,
+  attendance_date,
+  check_in_time,
+  check_out_time,
+  status,
+  worked_hours,
+  remarks
+)
+
+overtime_records(
+  overtime_id PK,
+  employee_id FK,
+  overtime_date,
+  hours_worked,
+  rate_per_hour,
+  total_amount,
+  approved_by FK,
+  status
+)
+
+
+allowance_types(
+  allowance_type_id PK,
+  allowance_name,
+  description,
+  is_taxable
+)
+
+employee_allowances(
+  employee_allowance_id PK,
+  employee_id FK,
+  allowance_type_id FK,
+  amount,
+  is_recurring,
+  effective_from,
+  effective_to,
+  status
+)
+
+deduction_types(
+  deduction_type_id PK,
+  deduction_name,
+  description,
+  is_mandatory
+)
+
+employee_deductions(
+  employee_deduction_id PK,
+  employee_id FK,
+  deduction_type_id FK,
+  amount,
+  is_recurring,
+  effective_from,
+  effective_to,
+  status
+)
+
+
+payroll_periods(
+  period_id PK,
+  period_name,
+  start_date,
+  end_date,
+  status,
+  created_at
+)
+
+payrolls(
+  payroll_id PK,
+  period_id FK,
+  employee_id FK,
+  basic_salary,
+  total_allowances,
+  total_overtime,
+  total_deductions,
+  gross_salary,
+  net_salary,
+  processed_by FK,
+  processed_date,
+  status
+)
+
+payroll_details(
+  payroll_detail_id PK,
+  payroll_id FK,
+  item_type,
+  item_name,
+  amount,
+  remarks
+)
+
+
+payslips(
+  payslip_id PK,
+  payroll_id FK,
+  payslip_number,
+  generated_date,
+  file_path,
+  issued_by FK
+)
+
+payments(
+  payment_id PK,
+  payroll_id FK,
+  payment_date,
+  payment_method,
+  reference_number,
+  amount_paid,
+  payment_status,
+  received_by
+)
+
